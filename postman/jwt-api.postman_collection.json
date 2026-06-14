@@ -1,0 +1,1187 @@
+{
+  "info": {
+    "name": "JWT API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "REST API с JWT-авторизацией.\n\nПорядок работы:\n1. Auth → Register (USER)\n2. Auth → Login as USER  → токен сохранится в {{userToken}}\n3. Auth → Login as ADMIN → токен сохранится в {{adminToken}}\n4. Далее — любые запросы\n\nФормат ошибок (RFC 7807 ProblemDetail):\n{\n  \"title\": \"Not Found\",\n  \"status\": 404,\n  \"detail\": \"...\"\n}"
+  },
+  "variable": [
+    { "key": "baseUrl",     "value": "http://localhost:8080" },
+    { "key": "userToken",   "value": "" },
+    { "key": "adminToken",  "value": "" },
+    { "key": "taskId",      "value": "1" },
+    { "key": "categoryId",  "value": "1" },
+    { "key": "userId",      "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register (USER)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"alice\",\n  \"email\": \"alice@example.com\",\n  \"password\": \"password123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Регистрация нового пользователя. Роль всегда USER.\nАдмин создаётся автоматически при старте: username=admin, password=admin123"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 201 Created\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Вернул token\", () => pm.expect(pm.response.json().token).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as USER",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"alice\",\n  \"password\": \"password123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Токен автоматически сохранится в переменную {{userToken}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 200 OK\", () => pm.response.to.have.status(200));",
+                  "var json = pm.response.json();",
+                  "pm.test(\"Вернул token\", () => pm.expect(json.token).to.be.a('string'));",
+                  "if (json.token) {",
+                  "    pm.collectionVariables.set('userToken', json.token);",
+                  "    console.log('userToken сохранён');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as ADMIN",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Токен автоматически сохранится в переменную {{adminToken}}.\nАдмин создаётся приложением при первом запуске (DataInitializer)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 200 OK\", () => pm.response.to.have.status(200));",
+                  "var json = pm.response.json();",
+                  "pm.test(\"Вернул token\", () => pm.expect(json.token).to.be.a('string'));",
+                  "if (json.token) {",
+                  "    pm.collectionVariables.set('adminToken', json.token);",
+                  "    console.log('adminToken сохранён');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ошибки",
+          "item": [
+            {
+              "name": "[400] Register — пустой username",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"\",\n  \"email\": \"valid@example.com\",\n  \"password\": \"password123\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/auth/register",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "auth", "register"]
+                },
+                "description": "Нарушение @NotBlank на поле username → 400 Validation Failed"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 400 Bad Request\", () => pm.response.to.have.status(400));",
+                      "var json = pm.response.json();",
+                      "pm.test(\"title: Validation Failed\", () => pm.expect(json.title).to.eql('Validation Failed'));",
+                      "pm.test(\"detail содержит 'username'\", () => pm.expect(json.detail).to.include('username'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "[400] Register — невалидный email",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"bob\",\n  \"email\": \"not-an-email\",\n  \"password\": \"password123\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/auth/register",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "auth", "register"]
+                },
+                "description": "Нарушение @Email на поле email → 400 Validation Failed"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 400 Bad Request\", () => pm.response.to.have.status(400));",
+                      "var json = pm.response.json();",
+                      "pm.test(\"title: Validation Failed\", () => pm.expect(json.title).to.eql('Validation Failed'));",
+                      "pm.test(\"detail содержит 'email'\", () => pm.expect(json.detail).to.include('email'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "[400] Register — пароль короче 6 символов",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"bob\",\n  \"email\": \"bob@example.com\",\n  \"password\": \"123\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/auth/register",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "auth", "register"]
+                },
+                "description": "Нарушение @Size(min=6) на поле password → 400 Validation Failed"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 400 Bad Request\", () => pm.response.to.have.status(400));",
+                      "var json = pm.response.json();",
+                      "pm.test(\"title: Validation Failed\", () => pm.expect(json.title).to.eql('Validation Failed'));",
+                      "pm.test(\"detail содержит 'password'\", () => pm.expect(json.detail).to.include('password'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "[400] Register — дубликат username",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"alice\",\n  \"email\": \"other@example.com\",\n  \"password\": \"password123\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/auth/register",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "auth", "register"]
+                },
+                "description": "Предварительно: выполнить «Register (USER)» (username=alice).\nИмя уже занято → 400 Bad Request"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 400 Bad Request\", () => pm.response.to.have.status(400));",
+                      "var json = pm.response.json();",
+                      "pm.test(\"title: Bad Request\", () => pm.expect(json.title).to.eql('Bad Request'));",
+                      "pm.test(\"detail: Username is already taken\", () => pm.expect(json.detail).to.eql('Username is already taken'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "[400] Register — дубликат email",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"alice2\",\n  \"email\": \"alice@example.com\",\n  \"password\": \"password123\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/auth/register",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "auth", "register"]
+                },
+                "description": "Предварительно: выполнить «Register (USER)» (email=alice@example.com).\nEmail уже занят → 400 Bad Request"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 400 Bad Request\", () => pm.response.to.have.status(400));",
+                      "var json = pm.response.json();",
+                      "pm.test(\"title: Bad Request\", () => pm.expect(json.title).to.eql('Bad Request'));",
+                      "pm.test(\"detail: Email is already in use\", () => pm.expect(json.detail).to.eql('Email is already in use'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "[401] Login — неверный пароль",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"alice\",\n  \"password\": \"wrongpassword\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/auth/login",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "auth", "login"]
+                },
+                "description": "Предварительно: выполнить «Register (USER)».\nНеверный пароль → 401 Unauthorized"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 401 Unauthorized\", () => pm.response.to.have.status(401));",
+                      "var json = pm.response.json();",
+                      "pm.test(\"title: Unauthorized\", () => pm.expect(json.title).to.eql('Unauthorized'));",
+                      "pm.test(\"detail: Invalid username or password\", () => pm.expect(json.detail).to.eql('Invalid username or password'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Tasks",
+      "description": "Доступно USER и ADMIN. Пользователь видит только свои задачи; ADMIN видит все.",
+      "item": [
+        {
+          "name": "Get all tasks",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "status", "value": "OPEN", "disabled": true }
+              ]
+            },
+            "description": "Параметр status необязателен. Значения: OPEN, IN_PROGRESS, DONE.\nСтрока с параметром status отключена — включите при необходимости."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Вернул page с content\", () => {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('content');",
+                  "    pm.expect(json.content).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get all tasks (фильтр по статусу)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks?status=OPEN",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks"],
+              "query": [{ "key": "status", "value": "OPEN" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get task by ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "{{taskId}}"]
+            },
+            "description": "{{taskId}} заполняется автоматически после Create task"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Есть поле id\", () => pm.expect(pm.response.json().id).to.exist);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create task",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Купить молоко\",\n  \"description\": \"2 литра, 3.2%\",\n  \"status\": \"OPEN\",\n  \"categoryId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks"]
+            },
+            "description": "После успешного создания ID задачи сохраняется в {{taskId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 201 Created\", () => pm.response.to.have.status(201));",
+                  "var json = pm.response.json();",
+                  "pm.test(\"Есть поле id\", () => pm.expect(json.id).to.exist);",
+                  "if (json.id) {",
+                  "    pm.collectionVariables.set('taskId', json.id);",
+                  "    console.log('taskId сохранён: ' + json.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update task",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Купить молоко\",\n  \"description\": \"Обновлено\",\n  \"status\": \"IN_PROGRESS\",\n  \"categoryId\": null\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "{{taskId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Статус задачи обновлён\", () => {",
+                  "    pm.expect(pm.response.json().status).to.eql('IN_PROGRESS');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete task",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "{{taskId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 204 No Content\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ошибки",
+          "item": [
+            {
+              "name": "[401] Get tasks — без токена",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/tasks",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "tasks"]
+                },
+                "description": "Запрос без заголовка Authorization → Spring Security возвращает 401"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 401 Unauthorized\", () => pm.response.to.have.status(401));",
+                      "var json = pm.response.json();",
+                      "pm.test(\"title: Unauthorized\", () => pm.expect(json.title).to.eql('Unauthorized'));",
+                      "pm.test(\"status в теле: 401\", () => pm.expect(json.status).to.eql(401));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "[401] Get tasks — невалидный токен",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer invalid.token.value" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/tasks",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "tasks"]
+                },
+                "description": "Токен сломан → JWT-фильтр не может его распарсить → 401"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 401 Unauthorized\", () => pm.response.to.have.status(401));",
+                      "pm.test(\"title: Unauthorized\", () => pm.expect(pm.response.json().title).to.eql('Unauthorized'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "[404] Get task — несуществующий ID",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/tasks/999999",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "tasks", "999999"]
+                },
+                "description": "Задача с таким ID не существует → ResourceNotFoundException → 404"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 404 Not Found\", () => pm.response.to.have.status(404));",
+                      "var json = pm.response.json();",
+                      "pm.test(\"title: Not Found\", () => pm.expect(json.title).to.eql('Not Found'));",
+                      "pm.test(\"status в теле: 404\", () => pm.expect(json.status).to.eql(404));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "[403] Get task — чужая задача",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/tasks/{{taskId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "tasks", "{{taskId}}"]
+                },
+                "description": "Предварительно:\n1. Создать задачу от имени alice ({{taskId}} заполнится)\n2. В {{userToken}} подставить токен ДРУГОГО пользователя (bob)\n\nПользователь пытается получить чужую задачу → ForbiddenException → 403"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 403 Forbidden\", () => pm.response.to.have.status(403));",
+                      "var json = pm.response.json();",
+                      "pm.test(\"title: Forbidden\", () => pm.expect(json.title).to.eql('Forbidden'));",
+                      "pm.test(\"status в теле: 403\", () => pm.expect(json.status).to.eql(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "[400] Create task — пустой title",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{userToken}}" },
+                  { "key": "Content-Type",  "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"\",\n  \"description\": \"desc\",\n  \"status\": \"OPEN\",\n  \"categoryId\": null\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/tasks",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "tasks"]
+                },
+                "description": "Нарушение @NotBlank(message=\"Task title is required\") → 400 Validation Failed"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 400 Bad Request\", () => pm.response.to.have.status(400));",
+                      "var json = pm.response.json();",
+                      "pm.test(\"title: Validation Failed\", () => pm.expect(json.title).to.eql('Validation Failed'));",
+                      "pm.test(\"detail: Task title is required\", () => pm.expect(json.detail).to.include('Task title is required'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Categories",
+      "item": [
+        {
+          "name": "Get all categories",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/categories?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "categories"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get category by ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/categories/{{categoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "categories", "{{categoryId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search categories",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/categories/search?name=Work",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "categories", "search"],
+              "query": [{ "key": "name", "value": "Work" }]
+            },
+            "description": "Поиск категорий по части имени"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Вернул массив\", () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create category [ADMIN]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Работа\",\n  \"description\": \"Рабочие задачи\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "categories"]
+            },
+            "description": "Только для ADMIN. После создания ID сохранится в {{categoryId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 201 Created\", () => pm.response.to.have.status(201));",
+                  "var json = pm.response.json();",
+                  "if (json.id) {",
+                  "    pm.collectionVariables.set('categoryId', json.id);",
+                  "    console.log('categoryId сохранён: ' + json.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update category [ADMIN]",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Работа\",\n  \"description\": \"Обновлённое описание\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/categories/{{categoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "categories", "{{categoryId}}"]
+            },
+            "description": "Только для ADMIN"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete category [ADMIN]",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/categories/{{categoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "categories", "{{categoryId}}"]
+            },
+            "description": "Только для ADMIN"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 204 No Content\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ошибки",
+          "item": [
+            {
+              "name": "[403] Create category — нет прав (USER)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{userToken}}" },
+                  { "key": "Content-Type",  "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Личное\",\n  \"description\": \"Личные задачи\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/categories",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "categories"]
+                },
+                "description": "POST /api/categories разрешён только ADMIN. Запрос с токеном USER → 403 Forbidden от Spring Security"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 403 Forbidden\", () => pm.response.to.have.status(403));",
+                      "var json = pm.response.json();",
+                      "pm.test(\"title: Forbidden\", () => pm.expect(json.title).to.eql('Forbidden'));",
+                      "pm.test(\"status в теле: 403\", () => pm.expect(json.status).to.eql(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "[400] Create category — пустое имя",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+                  { "key": "Content-Type",  "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"\",\n  \"description\": \"Описание\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/categories",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "categories"]
+                },
+                "description": "Нарушение @NotBlank(message=\"Category name is required\") → 400 Validation Failed"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 400 Bad Request\", () => pm.response.to.have.status(400));",
+                      "var json = pm.response.json();",
+                      "pm.test(\"title: Validation Failed\", () => pm.expect(json.title).to.eql('Validation Failed'));",
+                      "pm.test(\"detail: Category name is required\", () => pm.expect(json.detail).to.include('Category name is required'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "[400] Create category — дубликат имени",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+                  { "key": "Content-Type",  "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Работа\",\n  \"description\": \"Повторная попытка\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/categories",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "categories"]
+                },
+                "description": "Предварительно: выполнить «Create category [ADMIN]» (name=Работа).\nКатегория с таким именем уже есть → IllegalArgumentException → 400 Bad Request"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 400 Bad Request\", () => pm.response.to.have.status(400));",
+                      "var json = pm.response.json();",
+                      "pm.test(\"title: Bad Request\", () => pm.expect(json.title).to.eql('Bad Request'));",
+                      "pm.test(\"detail содержит имя категории\", () => pm.expect(json.detail).to.include('Работа'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "[404] Get category — несуществующий ID",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/categories/999999",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "categories", "999999"]
+                },
+                "description": "Категория с таким ID не существует → ResourceNotFoundException → 404"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 404 Not Found\", () => pm.response.to.have.status(404));",
+                      "var json = pm.response.json();",
+                      "pm.test(\"title: Not Found\", () => pm.expect(json.title).to.eql('Not Found'));",
+                      "pm.test(\"status в теле: 404\", () => pm.expect(json.status).to.eql(404));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Users [ADMIN]",
+      "description": "Все эндпоинты требуют роль ADMIN",
+      "item": [
+        {
+          "name": "Get all users",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/users?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            },
+            "description": "ID первого пользователя из ответа сохранится в {{userId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 200 OK\", () => pm.response.to.have.status(200));",
+                  "var content = pm.response.json().content;",
+                  "if (content && content.length > 0) {",
+                  "    pm.collectionVariables.set('userId', content[0].id);",
+                  "    console.log('userId сохранён: ' + content[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get user by ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "{{userId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Есть поле role\", () => pm.expect(pm.response.json().role).to.exist);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change user role",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}/role?role=ADMIN",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "{{userId}}", "role"],
+              "query": [{ "key": "role", "value": "ADMIN" }]
+            },
+            "description": "Изменить роль пользователя. Допустимые значения: USER, ADMIN"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Роль изменена на ADMIN\", () => {",
+                  "    pm.expect(pm.response.json().role).to.eql('ADMIN');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete user",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "{{userId}}"]
+            },
+            "description": "Внимание: удаление пользователя каскадно удалит все его задачи"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Статус 204 No Content\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ошибки",
+          "item": [
+            {
+              "name": "[403] Get users — нет прав (USER)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/users",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "users"]
+                },
+                "description": "/api/users/** разрешён только ADMIN. Запрос с токеном USER → 403 Forbidden от Spring Security"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 403 Forbidden\", () => pm.response.to.have.status(403));",
+                      "var json = pm.response.json();",
+                      "pm.test(\"title: Forbidden\", () => pm.expect(json.title).to.eql('Forbidden'));",
+                      "pm.test(\"status в теле: 403\", () => pm.expect(json.status).to.eql(403));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "[404] Get user — несуществующий ID",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/users/999999",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "users", "999999"]
+                },
+                "description": "Пользователь с таким ID не существует → ResourceNotFoundException → 404"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 404 Not Found\", () => pm.response.to.have.status(404));",
+                      "var json = pm.response.json();",
+                      "pm.test(\"title: Not Found\", () => pm.expect(json.title).to.eql('Not Found'));",
+                      "pm.test(\"status в теле: 404\", () => pm.expect(json.status).to.eql(404));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "[404] Change role — несуществующий пользователь",
+              "request": {
+                "method": "PUT",
+                "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/users/999999/role?role=ADMIN",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "users", "999999", "role"],
+                  "query": [{ "key": "role", "value": "ADMIN" }]
+                },
+                "description": "Пользователь с ID 999999 не существует → ResourceNotFoundException → 404"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 404 Not Found\", () => pm.response.to.have.status(404));",
+                      "var json = pm.response.json();",
+                      "pm.test(\"title: Not Found\", () => pm.expect(json.title).to.eql('Not Found'));",
+                      "pm.test(\"detail содержит '999999'\", () => pm.expect(json.detail).to.include('999999'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "[400] Change role — невалидное значение роли",
+              "request": {
+                "method": "PUT",
+                "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+                "url": {
+                  "raw": "{{baseUrl}}/api/users/{{userId}}/role?role=SUPERUSER",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "users", "{{userId}}", "role"],
+                  "query": [{ "key": "role", "value": "SUPERUSER" }]
+                },
+                "description": "Значение SUPERUSER не существует в enum Role (допустимы: USER, ADMIN) → Spring возвращает 400"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Статус 400 Bad Request\", () => pm.response.to.have.status(400));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
