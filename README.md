@@ -42,6 +42,75 @@ mvn test -Dtest=AuthServiceTest#register_success
 
 Приложение запускается на `http://localhost:8080`.
 
+## Docker
+
+### Сборка образа
+
+Команда одинакова на Linux и Windows — запускать из папки, где лежит `jwt-api/`:
+
+```bash
+docker build -t jwt-api:latest jwt-api/
+```
+
+Или из самой папки `jwt-api/`:
+
+```bash
+docker build -t jwt-api:latest .
+```
+
+Сборка трёхступенчатая:
+1. **deps** — скачивает Maven-зависимости (слой кэшируется, пока не изменится `pom.xml`).
+2. **builder** — компилирует проект и распаковывает JAR по слоям.
+3. **runtime** — минимальный образ `distroless/java21`, запуск от non-root пользователя (uid 65532).
+
+### Запуск контейнера
+
+Приложению нужна PostgreSQL. Проще всего запустить обе службы через Docker Compose — команда одинакова на Linux и Windows:
+
+```bash
+docker compose up -d
+```
+
+Остановить:
+
+```bash
+docker compose down
+```
+
+После запуска API доступен на `http://localhost:8080`.
+
+#### Альтернатива: запуск через docker run
+
+Если Docker Compose недоступен — однострочные команды без переносов, работают везде.
+
+**Linux / macOS:**
+```bash
+docker network create jwt-net
+
+docker run -d --name postgres --network jwt-net -e POSTGRES_DB=postgres -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres postgres:16-alpine
+
+docker run -d --name jwt-api --network jwt-net -p 8080:8080 -e SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/postgres -e SPRING_DATASOURCE_USERNAME=postgres -e SPRING_DATASOURCE_PASSWORD=postgres jwt-api:latest
+```
+
+**Windows (CMD и PowerShell):**
+```bat
+docker network create jwt-net
+
+docker run -d --name postgres --network jwt-net -e POSTGRES_DB=postgres -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres postgres:16-alpine
+
+docker run -d --name jwt-api --network jwt-net -p 8080:8080 -e SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/postgres -e SPRING_DATASOURCE_USERNAME=postgres -e SPRING_DATASOURCE_PASSWORD=postgres jwt-api:latest
+```
+
+### Переменные окружения
+
+| Переменная | По умолчанию | Описание |
+|---|---|---|
+| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/postgres` | JDBC URL базы данных |
+| `SPRING_DATASOURCE_USERNAME` | `postgres` | Пользователь БД |
+| `SPRING_DATASOURCE_PASSWORD` | `postgres` | Пароль БД |
+| `JWT_SECRET` | см. `application.yaml` | Секрет для подписи токенов |
+| `JWT_EXPIRATION` | `86400000` | Время жизни токена, мс |
+
 ## Первый запуск: admin-пользователь
 
 При старте приложение автоматически создаёт пользователя с ролью ADMIN, если его ещё нет в базе.
