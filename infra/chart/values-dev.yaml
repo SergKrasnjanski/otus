@@ -1,0 +1,32 @@
+replicaCount: 1
+
+image:
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+ingress:
+  hosts:
+    - host: jwt-api.dev.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+hpa:
+  enabled: false
+
+secrets:
+  datasource:
+    username: postgres
+    password: postgres
+  jwt:
+    secret: bXktdmVyeS1zZWN1cmUtc2VjcmV0LWtleS1mb3Itand0LXNpZ25pbmctbm90LWZvci1wcm9kdWN0aW9u
+  admin:
+    password: admin123

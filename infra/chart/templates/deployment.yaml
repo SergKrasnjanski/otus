@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "jwt-api.fullname" . }}
+  labels:
+    {{- include "jwt-api.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "jwt-api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "jwt-api.selectorLabels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "jwt-api.fullname" . }}
+            - secretRef:
+                name: {{ include "jwt-api.fullname" . }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          # startupProbe даёт приложению время стартовать (JVM + Liquibase-миграции)
+          # Максимальное ожидание: failureThreshold * periodSeconds = 30 * 10s = 5 мин
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 30
+            timeoutSeconds: 5
+          # livenessProbe перезапускает Pod если приложение зависло
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+            timeoutSeconds: 5
+          # readinessProbe убирает Pod из балансировщика пока он не готов принимать трафик
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

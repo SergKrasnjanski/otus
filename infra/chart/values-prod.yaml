@@ -1,0 +1,38 @@
+replicaCount: 2
+
+image:
+  pullPolicy: Always
+  tag: ""  # задавать при деплое: --set image.tag=<git-sha>
+
+ingress:
+  hosts:
+    - host: jwt-api.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: jwt-api-tls
+      hosts:
+        - jwt-api.example.com
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 75
+
+# Секреты для prod задавать через CI/CD, не хранить в репозитории:
+#   helm upgrade jwt-api ./infra/chart -f values-prod.yaml \
+#     --set secrets.datasource.username=$DB_USER \
+#     --set secrets.datasource.password=$DB_PASS \
+#     --set secrets.jwt.secret=$JWT_SECRET \
+#     --set secrets.admin.password=$ADMIN_PASS

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "jwt-api.fullname" . }}
+  labels:
+    {{- include "jwt-api.labels" . | nindent 4 }}
+data:
+  SPRING_DATASOURCE_URL: {{ .Values.app.datasource.url | quote }}
+  SPRING_JPA_HIBERNATE_DDL_AUTO: {{ .Values.app.jpa.ddlAuto | quote }}
+  SPRING_JPA_OPEN_IN_VIEW: {{ .Values.app.jpa.openInView | quote }}
+  SPRING_LIQUIBASE_CHANGE_LOG: {{ .Values.app.liquibase.changeLog | quote }}
+  JWT_EXPIRATION: {{ .Values.app.jwt.expiration | quote }}
+  ADMIN_USERNAME: {{ .Values.app.admin.username | quote }}
+  ADMIN_EMAIL: {{ .Values.app.admin.email | quote }}

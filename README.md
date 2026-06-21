@@ -111,6 +111,283 @@ docker run -d --name jwt-api --network jwt-net -p 8080:8080 -e SPRING_DATASOURCE
 | `JWT_SECRET` | см. `application.yaml` | Секрет для подписи токенов |
 | `JWT_EXPIRATION` | `86400000` | Время жизни токена, мс |
 
+## Kubernetes / Helm
+
+Helm-чарт находится в `infra/chart/`. Поддерживаются два окружения: `dev` и `prod`.
+
+### Требования
+
+- Helm 3+
+- `kubectl`, настроенный на нужный кластер
+- Docker-образ собран и доступен в registry кластера
+
+### Сборка и публикация образа
+
+```bash
+# Собрать образ
+docker build -t jwt-api:latest .
+
+# Если используется локальный registry (например, в kind/minikube):
+docker tag jwt-api:latest localhost:5000/jwt-api:latest
+docker push localhost:5000/jwt-api:latest
+```
+
+### Развёртывание в Minikube (пошагово)
+
+Полная инструкция с нуля: от запуска кластера до рабочего API.
+
+#### 1. Запустить Minikube
+
+```bash
+minikube start --driver=docker
+```
+
+> На Windows рекомендуется драйвер `docker` (Docker Desktop) или `hyperv`.
+
+#### 2. Включить Ingress-аддон
+
+Чарт использует NGINX Ingress Controller:
+
+```bash
+minikube addons enable ingress
+```
+
+Дождитесь готовности контроллера (~1 минута):
+
+```bash
+kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=120s
+```
+
+#### 3. Загрузить Docker-образ в Minikube
+
+Minikube использует собственный Docker-демон. Есть два способа:
+
+**Способ А — загрузить готовый образ:**
+
+```bash
+# Сначала собрать образ в локальном Docker
+docker build -t jwt-api:latest jwt-api/
+
+# Затем загрузить в Minikube
+minikube image load jwt-api:latest
+```
+
+**Способ Б — собрать образ прямо внутри Minikube (не нужна загрузка):**
+
+Linux/macOS:
+```bash
+eval $(minikube docker-env)
+docker build -t jwt-api:latest jwt-api/
+```
+
+Windows (PowerShell):
+```powershell
+& minikube -p minikube docker-env --shell powershell | Invoke-Expression
+docker build -t jwt-api:latest jwt-api/
+```
+
+#### 4. Задеплоить PostgreSQL
+
+Чарт рассчитан на внешний PostgreSQL с именем сервиса `postgres`. Быстрый способ — официальный Bitnami-чарт:
+
+```bash
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+
+helm upgrade --install postgres bitnami/postgresql \
+  --set auth.postgresPassword=postgres \
+  --set auth.database=postgres
+```
+
+Дождитесь готовности пода:
+
+```bash
+kubectl wait --for=condition=ready pod \
+  --selector=app.kubernetes.io/name=postgresql \
+  --timeout=120s
+```
+
+#### 5. Задеплоить приложение через Helm
+
+```bash
+helm upgrade --install jwt-api ./infra/chart \
+  -f ./infra/chart/values-dev.yaml \
+  --set image.repository=jwt-api \
+  --set image.tag=latest \
+  --set app.datasource.url=jdbc:postgresql://postgres-postgresql:5432/postgres
+```
+
+> Bitnami формирует имя сервиса как `<release>-postgresql`, поэтому после `helm install postgres ...` сервис называется `postgres-postgresql`.
+
+Проверить, что поды и Ingress поднялись:
+
+```bash
+kubectl get pods
+kubectl get ingress
+```
+
+#### 6. Настроить доступ к API
+
+Выберите способ в зависимости от того, как запущен Minikube.
+
+---
+
+##### Способ А — port-forward (работает всегда, рекомендуется для Docker Desktop)
+
+При использовании драйвера `docker` (Docker Desktop на Windows/macOS) IP кластера недоступен напрямую с хоста, поэтому самый простой способ — пробросить порт:
+
+```bash
+kubectl port-forward svc/jwt-api 8080:8080
+```
+
+Оставьте окно терминала открытым. API будет доступен на `http://localhost:8080`.
+
+---
+
+##### Способ Б — Ingress через minikube tunnel (Docker Desktop)
+
+Если нужно проверить работу Ingress:
+
+1. Откройте отдельный терминал **с правами администратора** и запустите (окно не закрывать):
+
+```bash
+minikube tunnel
+```
+
+2. Добавьте запись в hosts-файл:
+
+**Linux / macOS:**
+```bash
+echo "127.0.0.1 jwt-api.dev.local" | sudo tee -a /etc/hosts
+```
+
+**Windows** — открыть `C:\Windows\System32\drivers\etc\hosts` в Блокноте от имени администратора и добавить строку:
+```
+127.0.0.1  jwt-api.dev.local
+```
+
+API будет доступен на `http://jwt-api.dev.local`.
+
+---
+
+##### Способ В — Ingress по IP кластера (драйвер не docker: virtualbox, hyperv, kvm2)
+
+```bash
+minikube ip
+```
+
+Добавить IP в hosts-файл:
+
+**Linux / macOS:**
+```bash
+echo "$(minikube ip) jwt-api.dev.local" | sudo tee -a /etc/hosts
+```
+
+**Windows** — открыть `C:\Windows\System32\drivers\etc\hosts` в Блокноте от имени администратора:
+```
+<minikube-ip>  jwt-api.dev.local
+```
+
+API будет доступен на `http://jwt-api.dev.local`.
+
+---
+
+#### 7. Проверить API
+
+Замените `<base-url>` на адрес из выбранного выше способа:
+- Способ А: `http://localhost:8080`
+- Способ Б/В: `http://jwt-api.dev.local`
+
+Пример — регистрация:
+
+```bash
+curl -X POST <base-url>/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice","email":"alice@example.com","password":"secret123"}'
+```
+
+#### Очистить окружение
+
+```bash
+helm uninstall jwt-api
+helm uninstall postgres
+minikube stop
+```
+
+---
+
+### Деплой в dev
+
+```bash
+helm upgrade --install jwt-api ./infra/chart \
+  -f ./infra/chart/values-dev.yaml \
+  --set image.repository=localhost:5000/jwt-api \
+  --set image.tag=latest
+```
+
+Приложение будет доступно по адресу `http://jwt-api.dev.local` (нужно добавить запись в `/etc/hosts`, если Ingress настроен локально).
+
+### Деплой в prod
+
+Секреты передаются через `--set`, а не хранятся в файлах:
+
+```bash
+helm upgrade --install jwt-api ./infra/chart \
+  -f ./infra/chart/values-prod.yaml \
+  --set image.repository=<your-registry>/jwt-api \
+  --set image.tag=<git-sha> \
+  --set secrets.datasource.username=$DB_USER \
+  --set secrets.datasource.password=$DB_PASS \
+  --set secrets.jwt.secret=$JWT_SECRET \
+  --set secrets.admin.password=$ADMIN_PASS
+```
+
+### Полезные команды
+
+```bash
+# Проверить сгенерированные манифесты перед деплоем
+helm template jwt-api ./infra/chart -f ./infra/chart/values-dev.yaml
+
+# Статус релиза
+helm status jwt-api
+
+# История релизов
+helm history jwt-api
+
+# Откат к предыдущей версии
+helm rollback jwt-api
+
+# Удалить релиз
+helm uninstall jwt-api
+```
+
+### Структура чарта
+
+| Файл | Назначение |
+|---|---|
+| `infra/chart/values.yaml` | Базовые значения по умолчанию |
+| `infra/chart/values-dev.yaml` | Переопределения для dev (меньше ресурсов, HPA выключен) |
+| `infra/chart/values-prod.yaml` | Переопределения для prod (TLS, HPA, больше реплик) |
+| `templates/configmap.yaml` | Нечувствительные настройки приложения |
+| `templates/secret.yaml` | Пароли БД, JWT-секрет, пароль админа |
+| `templates/deployment.yaml` | Pod с health-пробами и non-root пользователем |
+| `templates/service.yaml` | ClusterIP на порту 8080 |
+| `templates/ingress.yaml` | Ingress (nginx) |
+| `templates/hpa.yaml` | Автомасштабирование по CPU и памяти |
+
+### Health-эндпоинты (Spring Boot Actuator)
+
+| Эндпоинт | Назначение |
+|---|---|
+| `GET /actuator/health` | Общее состояние (startupProbe) |
+| `GET /actuator/health/liveness` | Живо ли приложение (livenessProbe) |
+| `GET /actuator/health/readiness` | Готово ли принимать трафик (readinessProbe) |
+
+Все три эндпоинта открыты без авторизации.
+
 ## Первый запуск: admin-пользователь
 
 При старте приложение автоматически создаёт пользователя с ролью ADMIN, если его ещё нет в базе.
